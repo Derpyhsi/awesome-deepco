@@ -1,660 +1,862 @@
 // ==UserScript==
 // @name         DeepCo Custom Comm (Addon)
-// @version      v.10
+// @version      v.11
 // @description  Custom Comm Terminal
 // @author       diehardk0
 // @match        https://*.deepco.app/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=deepco.app
 // @license      MIT
-// @grant        none
+// @grant        GM_notification
+// @grant        unsafeWindow
 // ==/UserScript==
 
-(function () {
-  'use strict';
+(function() {
+    'use strict';
 
-  const ADDON_ID = 'customCommModal';
-  const CFG_MODAL_X = 'modalX';
-  const CFG_MODAL_Y = 'modalY';
-  const CFG_MODAL_W = 'modalW';
-  const CFG_MODAL_H = 'modalH';
-  const CFG_MODAL_VISIBLE = 'modalVisible';
-  const CFG_FM_X = 'friendsMgrX';
-  const CFG_FM_Y = 'friendsMgrY';
-  const CFG_FM_W = 'friendsMgrW';
-  const CFG_FM_H = 'friendsMgrH';
-  const CFG_FM_VISIBLE = 'friendsMgrVisible';
-  const CFG_FRIENDS_MAP_V2 = 'friendsMapV2';
-  const CFG_FRIENDS_LIST_V1 = 'friendsListV1';
-  const FRIENDS_LS_FALLBACK_KEY = 'dcCustomCommFriendsMapV2';
-  const MODAL_ID = 'dc-custom-comm-modal';
-  const MODAL_HEADER_ID = 'dc-custom-comm-modal-header';
-  const MODAL_BODY_ID = 'dc-custom-comm-modal-body';
-  const MODAL_INPUT_ID = 'dc-custom-comm-input';
-  const MODAL_SEND_ID = 'dc-custom-comm-send';
-  const MODAL_RESIZE_ID = 'dc-custom-comm-resize';
-  const FM_ID = 'dc-custom-comm-friendsmgr';
-  const FM_HEADER_ID = 'dc-custom-comm-friendsmgr-header';
-  const FM_RESIZE_ID = 'dc-custom-comm-friendsmgr-resize';
-  const HISTORY_KEY = 'dcCustomCommHistoryV1';
-  const MAX_HISTORY = 1000;
-  const DEFAULT_FRIEND_NAME_COLOR = '#3aa0ff';
-  const DEFAULT_FRIEND_MSG_COLOR = '#35ff6a';
+    const ADDON_ID = 'customCommModal';
+    const CFG_MODAL_X = 'modalX';
+    const CFG_MODAL_Y = 'modalY';
+    const CFG_MODAL_W = 'modalW';
+    const CFG_MODAL_H = 'modalH';
+    const CFG_MODAL_VISIBLE = 'modalVisible';
+    const CFG_FM_X = 'friendsMgrX';
+    const CFG_FM_Y = 'friendsMgrY';
+    const CFG_FM_W = 'friendsMgrW';
+    const CFG_FM_H = 'friendsMgrH';
+    const CFG_FM_VISIBLE = 'friendsMgrVisible';
+    const CFG_FRIENDS_MAP_V2 = 'friendsMapV2';
+    const CFG_FRIENDS_LIST_V1 = 'friendsListV1';
+    const FRIENDS_LS_FALLBACK_KEY = 'dcCustomCommFriendsMapV2';
+    const MODAL_ID = 'dc-custom-comm-modal';
+    const MODAL_HEADER_ID = 'dc-custom-comm-modal-header';
+    const MODAL_BODY_ID = 'dc-custom-comm-modal-body';
+    const MODAL_INPUT_ID = 'dc-custom-comm-input';
+    const MODAL_SEND_ID = 'dc-custom-comm-send';
+    const MODAL_RESIZE_ID = 'dc-custom-comm-resize';
+    const FM_ID = 'dc-custom-comm-friendsmgr';
+    const FM_HEADER_ID = 'dc-custom-comm-friendsmgr-header';
+    const FM_RESIZE_ID = 'dc-custom-comm-friendsmgr-resize';
+    const HISTORY_KEY = 'dcCustomCommHistoryV1';
+    const MAX_HISTORY = 1000;
+    const DEFAULT_FRIEND_NAME_COLOR = '#3aa0ff';
+    const DEFAULT_FRIEND_MSG_COLOR = '#35ff6a';
+    const DEBUG_MENTIONS = true; // Set to false to disable debug logs
 
-  let core = null;
-  let addonEnabled = false;
-  let unsubTurbo = null;
-  let chatObserver = null;
-  let chatObserverHooked = false;
-  let lastChatFrame = null;
-  let modalVisible = true;
-  let friendsMgrVisible = false;
-  let friendsMap = Object.create(null);
+    let core = null;
+    let addonEnabled = false;
+    let unsubTurbo = null;
+    let chatObserver = null;
+    let chatObserverHooked = false;
+    let lastChatFrame = null;
+    let modalVisible = true;
+    let friendsMgrVisible = false;
+    let friendsMap = Object.create(null);
 
-  const messageLog = [];
-  const messageKeySet = new Set();
+    const messageLog = [];
+    const messageKeySet = new Set();
 
-  const SLASH_COMMANDS = [
-    { command: "/process", description: "Main processing area", path: "/dig" },
-    { command: "/upgrades", description: "Upgrade systems", path: "/upgrades" },
-    { command: "/performance", description: "Performance leaderboards", path: "/legends" },
-    { command: "/recursion", description: "Recursion interface", path: "/recursion" },
-    { command: "/settings", description: "System settings", path: "/settings" },
-    { command: "/shop", description: "DeepCo™ shop", path: "/shop" },
-    { command: "/achievements", description: "Achievement system", path: "/achievements" },
-    { command: "/departments", description: "Department management", path: "/departments" },
-    { command: "/messages", description: "Email system", path: "/worker_emails" },
-    { command: "/terminal", description: "Access Terminal (TUI)", path: "/terminal" },
-    { command: "/faq", description: "Frequently asked questions", path: "/faq" },
-    { command: "/terms", description: "Terms of service", path: "/terms" },
-    { command: "/syslog", description: "System update log", path: "/dev_log_entries" },
-    { command: "/idle", description: "Async Division", path: "/idle/initiate" }
-  ];
+    const SLASH_COMMANDS = [{
+            command: "/process",
+            description: "Main processing area",
+            path: "/dig"
+        },
+        {
+            command: "/upgrades",
+            description: "Upgrade systems",
+            path: "/upgrades"
+        },
+        {
+            command: "/performance",
+            description: "Performance leaderboards",
+            path: "/legends"
+        },
+        {
+            command: "/recursion",
+            description: "Recursion interface",
+            path: "/recursion"
+        },
+        {
+            command: "/settings",
+            description: "System settings",
+            path: "/settings"
+        },
+        {
+            command: "/shop",
+            description: "DeepCo™ shop",
+            path: "/shop"
+        },
+        {
+            command: "/achievements",
+            description: "Achievement system",
+            path: "/achievements"
+        },
+        {
+            command: "/departments",
+            description: "Department management",
+            path: "/departments"
+        },
+        {
+            command: "/messages",
+            description: "Email system",
+            path: "/worker_emails"
+        },
+        {
+            command: "/terminal",
+            description: "Access Terminal (TUI)",
+            path: "/terminal"
+        },
+        {
+            command: "/faq",
+            description: "Frequently asked questions",
+            path: "/faq"
+        },
+        {
+            command: "/terms",
+            description: "Terms of service",
+            path: "/terms"
+        },
+        {
+            command: "/syslog",
+            description: "System update log",
+            path: "/dev_log_entries"
+        },
+        {
+            command: "/idle",
+            description: "Async Division",
+            path: "/idle/initiate"
+        }
+    ];
 
-  function getCfg(key, defVal) {
-    if (!core) return defVal;
-    return core.getAddonConfig(ADDON_ID, key, defVal);
-  }
-  function setCfg(key, val) {
-    if (!core) return;
-    core.setAddonConfig(ADDON_ID, key, val);
-  }
-  function log(msg, level = 'info') {
-    if (core?.log) core.log(ADDON_ID, msg, level);
-    else console.log('[CustomCommModal]', msg);
-  }
-
-  function normName(s) {
-    return String(s || '').trim().toLowerCase();
-  }
-
-  function clampHexColor(s, fallback) {
-    const v = String(s || '').trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
-    return fallback;
-  }
-
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function safeParseJson(raw) {
-    try { return JSON.parse(raw); } catch (e) { return null; }
-  }
-
-  function getFMap() {
-    const raw = localStorage.getItem(FRIENDS_LS_FALLBACK_KEY);
-    if (!raw) return null;
-    const obj = safeParseJson(raw);
-    if (obj && typeof obj === 'object' && !Array.isArray(obj)) return obj;
-    return null;
-  }
-
-  function saveFMap(mapObj) {
-    try { localStorage.setItem(FRIENDS_LS_FALLBACK_KEY, JSON.stringify(mapObj)); } catch (e) {}
-  }
-
-  function normMapInput(mapObj) {
-    const out = Object.create(null);
-    if (!mapObj || typeof mapObj !== 'object') return out;
-
-    for (const [k, v] of Object.entries(mapObj)) {
-      const key = normName(k);
-      if (!key) continue;
-      const name = String(v?.name ?? k).trim() || k;
-      out[key] = {
-        name,
-        key,
-        nameColor: clampHexColor(v?.nameColor, DEFAULT_FRIEND_NAME_COLOR),
-        msgColor: clampHexColor(v?.msgColor, DEFAULT_FRIEND_MSG_COLOR)
-      };
-    }
-    return out;
-  }
-
-  function migrateIfNeeded() {
-    let map = null;
-
-    if (core) {
-      const cfgMap = getCfg(CFG_FRIENDS_MAP_V2, null);
-      if (cfgMap && typeof cfgMap === 'object' && !Array.isArray(cfgMap)) {
-        map = cfgMap;
-      }
+    function getCfg(key, defVal) {
+        if (!core) return defVal;
+        return core.getAddonConfig(ADDON_ID, key, defVal);
     }
 
-    if (!map) {
-      const fb = getFMap();
-      if (fb) map = fb;
+    function setCfg(key, val) {
+        if (!core) return;
+        core.setAddonConfig(ADDON_ID, key, val);
     }
 
-    if (!map && core) {
-      const v1 = getCfg(CFG_FRIENDS_LIST_V1, null);
-      if (Array.isArray(v1)) {
-        const converted = Object.create(null);
-        v1.map(x => String(x)).filter(Boolean).forEach(name => {
-          const key = normName(name);
-          if (!key) return;
-          converted[key] = { name: name.trim(), nameColor: DEFAULT_FRIEND_NAME_COLOR, msgColor: DEFAULT_FRIEND_MSG_COLOR };
-        });
-        map = converted;
-      }
+    function log(msg, level = 'info') {
+        if (core?.log) core.log(ADDON_ID, msg, level);
+        else console.log('[CustomCommModal]', msg);
     }
 
-    return normMapInput(map);
-  }
-
-  function serializeFMap() {
-    const out = Object.create(null);
-    for (const [k, f] of Object.entries(friendsMap)) {
-      out[k] = {
-        name: f.name,
-        nameColor: f.nameColor,
-        msgColor: f.msgColor
-      };
+    function normName(s) {
+        return String(s || '').trim().toLowerCase();
     }
-    return out;
-  }
 
-  function loadFriends() {
-    friendsMap = migrateIfNeeded();
-    saveFMap(serializeFMap());
-  }
+    function clampHexColor(s, fallback) {
+        const v = String(s || '').trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
+        return fallback;
+    }
 
-  function persistFriends() {
-    const payload = serializeFMap();
-    saveFMap(payload);
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 
-    if (!core) return;
+    function safeParseJson(raw) {
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            return null;
+        }
+    }
 
-    const current = getCfg(CFG_FRIENDS_MAP_V2, null);
-    const currObj = (current && typeof current === 'object' && !Array.isArray(current)) ? current : null;
+    function getFMap() {
+        const raw = localStorage.getItem(FRIENDS_LS_FALLBACK_KEY);
+        if (!raw) return null;
+        const obj = safeParseJson(raw);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) return obj;
+        return null;
+    }
 
-    const a = JSON.stringify(currObj || {});
-    const b = JSON.stringify(payload);
-    if (a !== b) setCfg(CFG_FRIENDS_MAP_V2, payload);
-  }
+    function saveFMap(mapObj) {
+        try {
+            localStorage.setItem(FRIENDS_LS_FALLBACK_KEY, JSON.stringify(mapObj));
+        } catch (e) {}
+    }
 
-  function getFriend(username) {
-    const key = normName(username);
-    if (!key) return null;
-    return friendsMap[key] || null;
-  }
+    function normMapInput(mapObj) {
+        const out = Object.create(null);
+        if (!mapObj || typeof mapObj !== 'object') return out;
 
-  function addFriend(nameRaw, opts = {}) {
-    const raw = String(nameRaw || '').trim();
-    const key = normName(raw);
-    if (!key) return { ok: false, msg: 'Usage: /friend <name>' };
+        for (const [k, v] of Object.entries(mapObj)) {
+            const key = normName(k);
+            if (!key) continue;
+            const name = String(v?.name ?? k).trim() || k;
+            out[key] = {
+                name,
+                key,
+                nameColor: clampHexColor(v?.nameColor, DEFAULT_FRIEND_NAME_COLOR),
+                msgColor: clampHexColor(v?.msgColor, DEFAULT_FRIEND_MSG_COLOR)
+            };
+        }
+        return out;
+    }
 
-    if (friendsMap[key]) return { ok: false, msg: `${raw} is already in your friends list.` };
+    function migrateIfNeeded() {
+        let map = null;
 
-    friendsMap[key] = {
-      name: raw,
-      key,
-      nameColor: clampHexColor(opts.nameColor, DEFAULT_FRIEND_NAME_COLOR),
-      msgColor: clampHexColor(opts.msgColor, DEFAULT_FRIEND_MSG_COLOR)
-    };
+        if (core) {
+            const cfgMap = getCfg(CFG_FRIENDS_MAP_V2, null);
+            if (cfgMap && typeof cfgMap === 'object' && !Array.isArray(cfgMap)) {
+                map = cfgMap;
+            }
+        }
 
-    persistFriends();
-    return { ok: true, msg: `Added friend: ${raw}` };
-  }
+        if (!map) {
+            const fb = getFMap();
+            if (fb) map = fb;
+        }
 
-  function removeFriend(nameRaw) {
-    const raw = String(nameRaw || '').trim();
-    const key = normName(raw);
-    if (!key) return { ok: false, msg: 'Usage: /unfriend <name>' };
+        if (!map && core) {
+            const v1 = getCfg(CFG_FRIENDS_LIST_V1, null);
+            if (Array.isArray(v1)) {
+                const converted = Object.create(null);
+                v1.map(x => String(x)).filter(Boolean).forEach(name => {
+                    const key = normName(name);
+                    if (!key) return;
+                    converted[key] = {
+                        name: name.trim(),
+                        nameColor: DEFAULT_FRIEND_NAME_COLOR,
+                        msgColor: DEFAULT_FRIEND_MSG_COLOR
+                    };
+                });
+                map = converted;
+            }
+        }
 
-    if (!friendsMap[key]) return { ok: false, msg: `${raw} was not in your friends list.` };
+        return normMapInput(map);
+    }
 
-    delete friendsMap[key];
-    persistFriends();
-    return { ok: true, msg: `Removed friend: ${raw}` };
-  }
+    function serializeFMap() {
+        const out = Object.create(null);
+        for (const [k, f] of Object.entries(friendsMap)) {
+            out[k] = {
+                name: f.name,
+                nameColor: f.nameColor,
+                msgColor: f.msgColor
+            };
+        }
+        return out;
+    }
 
-  function updateFriend(keyLower, patch) {
-    const k = normName(keyLower);
-    if (!k || !friendsMap[k]) return false;
+    function loadFriends() {
+        friendsMap = migrateIfNeeded();
+        saveFMap(serializeFMap());
+    }
 
-    const f = friendsMap[k];
-    if (patch.name != null) f.name = String(patch.name).trim() || f.name;
-    if (patch.nameColor != null) f.nameColor = clampHexColor(patch.nameColor, f.nameColor);
-    if (patch.msgColor != null) f.msgColor = clampHexColor(patch.msgColor, f.msgColor);
+    function persistFriends() {
+        const payload = serializeFMap();
+        saveFMap(payload);
 
-    persistFriends();
-    return true;
-  }
+        if (!core) return;
 
-  function listFriendsText() {
-    const keys = Object.keys(friendsMap);
-    if (!keys.length) return 'Friends: (none)\nUse: /friend <name> or open Friends Manager.';
-    const lines = keys
-      .map(k => friendsMap[k].name)
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-    return `Friends (${lines.length}):\n` + lines.map(n => `- ${n}`).join('\n');
-  }
+        const current = getCfg(CFG_FRIENDS_MAP_V2, null);
+        const currObj = (current && typeof current === 'object' && !Array.isArray(current)) ? current : null;
 
-  loadFriends();
+        const a = JSON.stringify(currObj || {});
+        const b = JSON.stringify(payload);
+        if (a !== b) setCfg(CFG_FRIENDS_MAP_V2, payload);
+    }
 
-  function makeKey(msg) {
-    return String(msg?.id || '') || `${msg.time || ''}||${msg.username || ''}||${msg.message || ''}`;
-  }
+    function getFriend(username) {
+        const key = normName(username);
+        if (!key) return null;
+        return friendsMap[key] || null;
+    }
 
-  function loadHistory() {
-    try {
-      const raw = localStorage.getItem(HISTORY_KEY);
-      if (!raw) return;
-      const arr = JSON.parse(raw);
-      if (!Array.isArray(arr)) return;
-
-      arr.forEach(m => {
-        const msg = {
-          username: m.username || 'SYSTEM',
-          time: m.time || '',
-          message: m.message || ''
+    function addFriend(nameRaw, opts = {}) {
+        const raw = String(nameRaw || '').trim();
+        const key = normName(raw);
+        if (!key) return {
+            ok: false,
+            msg: 'Usage: /friend <name>'
         };
-        const key = makeKey(msg);
-        if (!messageKeySet.has(key)) {
-          messageKeySet.add(key);
-          messageLog.push(msg);
+
+        if (friendsMap[key]) return {
+            ok: false,
+            msg: `${raw} is already in your friends list.`
+        };
+
+        friendsMap[key] = {
+            name: raw,
+            key,
+            nameColor: clampHexColor(opts.nameColor, DEFAULT_FRIEND_NAME_COLOR),
+            msgColor: clampHexColor(opts.msgColor, DEFAULT_FRIEND_MSG_COLOR)
+        };
+
+        persistFriends();
+        return {
+            ok: true,
+            msg: `Added friend: ${raw}`
+        };
+    }
+
+    function removeFriend(nameRaw) {
+        const raw = String(nameRaw || '').trim();
+        const key = normName(raw);
+        if (!key) return {
+            ok: false,
+            msg: 'Usage: /unfriend <name>'
+        };
+
+        if (!friendsMap[key]) return {
+            ok: false,
+            msg: `${raw} was not in your friends list.`
+        };
+
+        delete friendsMap[key];
+        persistFriends();
+        return {
+            ok: true,
+            msg: `Removed friend: ${raw}`
+        };
+    }
+
+    function updateFriend(keyLower, patch) {
+        const k = normName(keyLower);
+        if (!k || !friendsMap[k]) return false;
+
+        const f = friendsMap[k];
+        if (patch.name != null) f.name = String(patch.name).trim() || f.name;
+        if (patch.nameColor != null) f.nameColor = clampHexColor(patch.nameColor, f.nameColor);
+        if (patch.msgColor != null) f.msgColor = clampHexColor(patch.msgColor, f.msgColor);
+
+        persistFriends();
+        return true;
+    }
+
+    function listFriendsText() {
+        const keys = Object.keys(friendsMap);
+        if (!keys.length) return 'Friends: (none)\nUse: /friend <name> or open Friends Manager.';
+        const lines = keys
+            .map(k => friendsMap[k].name)
+            .sort((a, b) => a.localeCompare(b, undefined, {
+                sensitivity: 'base'
+            }));
+        return `Friends (${lines.length}):\n` + lines.map(n => `- ${n}`).join('\n');
+    }
+
+    loadFriends();
+
+    function makeKey(msg) {
+        return String(msg?.id || '') || `${msg.time || ''}||${msg.username || ''}||${msg.message || ''}`;
+    }
+
+    function loadHistory() {
+        try {
+            const raw = localStorage.getItem(HISTORY_KEY);
+            if (!raw) return;
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return;
+
+            arr.forEach(m => {
+                const msg = {
+                    username: m.username || 'SYSTEM',
+                    time: m.time || '',
+                    message: m.message || ''
+                };
+                const key = makeKey(msg);
+                if (!messageKeySet.has(key)) {
+                    messageKeySet.add(key);
+                    messageLog.push(msg);
+                }
+            });
+        } catch (e) {
+            console.error('[CustomCommModal] Failed to load history:', e);
         }
-      });
-    } catch (e) {
-      console.error('[CustomCommModal] Failed to load history:', e);
-    }
-  }
-
-  function saveHistory() {
-    try {
-      const filtered = messageLog.filter(m => m.username !== 'LOCAL');
-      const trimmed = filtered.slice(-MAX_HISTORY);
-      const payload = trimmed.map(m => ({ username: m.username, time: m.time, message: m.message }));
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(payload));
-    } catch (e) {
-      console.error('[CustomCommModal] Failed to save history:', e);
-    }
-  }
-
-  function clearHistory() {
-    try { localStorage.removeItem(HISTORY_KEY); } catch (e) {}
-  }
-
-  loadHistory();
-
-  function getChatFrame() {
-    return document.querySelector('turbo-frame#chat') || null;
-  }
-
-  function getChatRoot() {
-    return document.querySelector('[data-controller~="chat"]') || null;
-  }
-
-  function getChatUsernameColor() {
-    const frame = getChatFrame();
-    if (!frame) return null;
-    const candidate =
-      frame.querySelector('.text-primary, .font-semibold, .chat-header span, .text-accent');
-    if (!candidate) return null;
-    return getComputedStyle(candidate).color;
-  }
-
-  function ensureCommModal() {
-    if (!addonEnabled) return;
-
-    if (core) {
-      modalVisible = !!getCfg(CFG_MODAL_VISIBLE, true);
-      friendsMgrVisible = !!getCfg(CFG_FM_VISIBLE, false);
     }
 
-    const chatFrame = getChatFrame();
-
-    if (!chatFrame) {
-      if (modalVisible) ensureCommModalExist();
-      if (friendsMgrVisible) ensureFriendsManagerExists();
-      return;
-    }
-
-    hideChatcard(chatFrame);
-
-    if (modalVisible) {
-      ensureCommModalExist();
-      syncMessagesFromOriginal();
-      hookChatObserver(chatFrame);
-    } else {
-      const modal = document.getElementById(MODAL_ID);
-      if (modal) modal.style.display = 'none';
-    }
-
-    if (friendsMgrVisible) ensureFriendsManagerExists();
-    else {
-      const fm = document.getElementById(FM_ID);
-      if (fm) fm.style.display = 'none';
-    }
-  }
-
-  function hideChatcard(chatFrame) {
-    const chatCard = chatFrame.querySelector('.card');
-    if (!chatCard) return;
-    if (!chatCard.__dcCustomCommHidden) {
-      chatCard.style.display = 'none';
-      chatCard.__dcCustomCommHidden = true;
-    }
-  }
-
-  function restoreChatcard() {
-    const chatFrame = getChatFrame();
-    if (!chatFrame) return;
-    const chatCard = chatFrame.querySelector('.card');
-    if (!chatCard) return;
-    if (chatCard.__dcCustomCommHidden) {
-      chatCard.style.display = '';
-      delete chatCard.__dcCustomCommHidden;
-    }
-  }
-
-  function hookChatObserver(chatFrame) {
-    if (!chatFrame) return;
-
-    if (lastChatFrame && chatFrame !== lastChatFrame) {
-      unhookChatObserver();
-    }
-
-    if (chatObserverHooked && chatObserver) return;
-
-    lastChatFrame = chatFrame;
-
-    chatObserver = new MutationObserver(() => {
-      if (hookChatObserver.__raf) return;
-      hookChatObserver.__raf = requestAnimationFrame(() => {
-        hookChatObserver.__raf = null;
-        if (!addonEnabled || !modalVisible) return;
-        syncMessagesFromOriginal();
-      });
-    });
-
-    chatObserver.observe(chatFrame, { childList: true, subtree: true, characterData: true });
-    chatObserverHooked = true;
-  }
-  hookChatObserver.__raf = null;
-
-  function unhookChatObserver() {
-    if (chatObserver) {
-      try { chatObserver.disconnect(); } catch (e) {}
-    }
-    chatObserver = null;
-    chatObserverHooked = false;
-    lastChatFrame = null;
-    if (hookChatObserver.__raf) {
-      cancelAnimationFrame(hookChatObserver.__raf);
-      hookChatObserver.__raf = null;
-    }
-  }
-
-  const timeRegex = /^\d{1,2}:\d{2}\s*(AM|PM)$/i;
-  const idRegex = /^\d{6,}$/;
-
-  function buildMessages(lines) {
-    const messages = [];
-    let i = 0;
-
-    while (i < lines.length) {
-      const line = lines[i];
-
-      if (
-        idRegex.test(line) &&
-        i + 2 < lines.length &&
-        timeRegex.test(lines[i + 1]) &&
-        !idRegex.test(lines[i + 2])
-      ) {
-        const time = lines[i + 1];
-        const user = lines[i + 2];
-
-        let j = i + 3;
-        const msgLines = [];
-        while (j < lines.length && !idRegex.test(lines[j])) {
-          msgLines.push(lines[j]);
-          j++;
+    function notifyMention(username, message) {
+        if (DEBUG_MENTIONS) {
+            console.log('[CustomCommModal] Attempting notification:', { username, message });
         }
 
-        const messageText = msgLines.join('\n').replace(/^>\s?/gm, '').trim();
-        if (messageText) messages.push({ username: user, time, message: messageText });
-
-        i = j;
-        continue;
-      }
-
-      if (line.startsWith('>')) {
-        const msgLines = [];
-        let j = i;
-        while (j < lines.length && lines[j].startsWith('>')) {
-          msgLines.push(lines[j]);
-          j++;
+        try {
+            GM_notification({
+                title: `${username} mentioned you`,
+                text: message.length > 100 ? message.substring(0, 100) + '...' : message,
+                image: 'https://www.google.com/s2/favicons?sz=64&domain=deepco.app',
+                onclick: () => {
+                    unsafeWindow.focus();
+                }
+            });
+            if (DEBUG_MENTIONS) {
+                console.log('[CustomCommModal] Notification sent successfully');
+            }
+        } catch (e) {
+            console.error('[CustomCommModal] Failed to send notification:', e);
         }
-
-        const messageText = msgLines.join('\n').replace(/^>\s?/gm, '').trim();
-        if (messageText) messages.push({ username: 'SYSTEM', time: '', message: messageText });
-
-        i = j;
-        continue;
-      }
-
-      messages.push({ username: 'SYSTEM', time: '', message: line });
-      i++;
     }
 
-    messages.reverse();
-    return messages;
-  }
+    function saveHistory() {
+        try {
+            const filtered = messageLog.filter(m => m.username !== 'LOCAL');
+            const trimmed = filtered.slice(-MAX_HISTORY);
+            const payload = trimmed.map(m => ({
+                username: m.username,
+                time: m.time,
+                message: m.message
+            }));
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(payload));
+        } catch (e) {
+            console.error('[CustomCommModal] Failed to save history:', e);
+        }
+    }
 
-  function parseChatMessages(chatFrame) {
-  const out = [];
-  if (!chatFrame) return out;
+    function clearHistory() {
+        try {
+            localStorage.removeItem(HISTORY_KEY);
+        } catch (e) {}
+    }
 
-  const list = chatFrame.querySelector('#chat-messages') || chatFrame;
-  const nodes = list.querySelectorAll('[data-role="chat-message"]');
-  if (!nodes || !nodes.length) return out;
+    loadHistory();
 
-  nodes.forEach(node => {
-    try {
-      const isSystem = String(node.getAttribute('data-is-system') || '') === 'true';
+    function getChatFrame() {
+        return document.querySelector('turbo-frame#chat') || null;
+    }
 
-      const rawId = (node.getAttribute('id') || node.id || '').trim();
-      const id = rawId ? rawId.replace(/^"+|"+$/g, '') : '';
+    function getChatRoot() {
+        return document.querySelector('[data-controller~="chat"]') || null;
+    }
 
-      const tsNode = node.querySelector('[data-controller="local-time"][data-local-time-format-value="time"]');
-      const timeText = (tsNode?.textContent || '').trim();
+    function getChatUsernameColor() {
+        const frame = getChatFrame();
+        if (!frame) return null;
+        const candidate =
+            frame.querySelector('.text-primary, .font-semibold, .chat-header span, .text-accent');
+        if (!candidate) return null;
+        return getComputedStyle(candidate).color;
+    }
 
-      let username = 'SYSTEM';
-      let usernameColor = null; // Add this
+    function ensureCommModal() {
+        if (!addonEnabled) return;
 
-      if (!isSystem) {
-        const link = node.querySelector('a.worker-name-link');
-        if (link) {
-          const spans = Array.from(link.querySelectorAll('span')).filter(s => !s.classList.contains('official-badge'));
-          const candidate = spans.length ? spans[spans.length - 1] : link;
-          username = (candidate.textContent || '').trim() || 'SYSTEM';
-          // Capture the color from computed style
-          usernameColor = getComputedStyle(candidate).color;
+        if (core) {
+            modalVisible = !!getCfg(CFG_MODAL_VISIBLE, true);
+            friendsMgrVisible = !!getCfg(CFG_FM_VISIBLE, false);
+        }
+
+        const chatFrame = getChatFrame();
+
+        if (!chatFrame) {
+            if (modalVisible) ensureCommModalExist();
+            if (friendsMgrVisible) ensureFriendsManagerExists();
+            return;
+        }
+
+        hideChatcard(chatFrame);
+
+        if (modalVisible) {
+            ensureCommModalExist();
+            syncMessagesFromOriginal();
+            hookChatObserver(chatFrame);
         } else {
-          const anyUser = node.querySelector('.worker-name-link, .font-semibold, [data-worker-id]');
-          if (anyUser) {
-            username = (anyUser.textContent || '').trim() || 'SYSTEM';
-            usernameColor = getComputedStyle(anyUser).color;
-          }
+            const modal = document.getElementById(MODAL_ID);
+            if (modal) modal.style.display = 'none';
         }
-      }
 
-      const msgNode = node.querySelector('.break-words') || node.querySelector('.leading-relaxed');
-      const message = (msgNode?.textContent || '').trim();
-
-      if (!message) return;
-
-      out.push({
-        id: id || String(node.getAttribute('data-message-timestamp') || '').replace(/^"+|"+$/g, ''),
-        username,
-        usernameColor, // Add this
-        time: timeText || '',
-        message
-      });
-    } catch (e) {}
-  });
-
-  out.reverse();
-  return out;
-}
-
-  function ensureBodyLayers(modalBody) {
-    if (!modalBody) return { remote: null, local: null };
-    let remote = modalBody.querySelector('.dc-comm-remote');
-    let local = modalBody.querySelector('.dc-comm-local');
-
-    if (!remote) {
-      remote = document.createElement('div');
-      remote.className = 'dc-comm-remote';
-      modalBody.appendChild(remote);
-    }
-    if (!local) {
-      local = document.createElement('div');
-      local.className = 'dc-comm-local';
-      modalBody.appendChild(local);
-    }
-    return { remote, local };
-  }
-
-  function syncMessagesFromOriginal() {
-    const modalBody = document.getElementById(MODAL_BODY_ID);
-    if (!modalBody) return;
-
-    const chatFrame = getChatFrame();
-    if (!chatFrame) {
-      renderMessage(modalBody);
-      return;
-    }
-
-    const modal = document.getElementById(MODAL_ID);
-    if (modal) {
-        const userColor = getChatUsernameColor();
-        if (userColor) {
-            modal.style.setProperty('--dc-comm-user-color', userColor);
+        if (friendsMgrVisible) ensureFriendsManagerExists();
+        else {
+            const fm = document.getElementById(FM_ID);
+            if (fm) fm.style.display = 'none';
         }
     }
 
-    const oldScrollTop = modalBody.scrollTop;
-    const maxScroll = modalBody.scrollHeight - modalBody.clientHeight;
-    const nearBottom = maxScroll <= 0 ? true : (maxScroll - oldScrollTop) < 40;
+    function hideChatcard(chatFrame) {
+        const chatCard = chatFrame.querySelector('.card');
+        if (!chatCard) return;
+        if (!chatCard.__dcCustomCommHidden) {
+            chatCard.style.display = 'none';
+            chatCard.__dcCustomCommHidden = true;
+        }
+    }
 
-    const domMsgs = parseChatMessages(chatFrame);
+    function restoreChatcard() {
+        const chatFrame = getChatFrame();
+        if (!chatFrame) return;
+        const chatCard = chatFrame.querySelector('.card');
+        if (!chatCard) return;
+        if (chatCard.__dcCustomCommHidden) {
+            chatCard.style.display = '';
+            delete chatCard.__dcCustomCommHidden;
+        }
+    }
 
-    let snapshotMessages = domMsgs;
-    if (!snapshotMessages || snapshotMessages.length === 0) {
-      const clone = chatFrame.cloneNode(true);
-      const cardBody = clone.querySelector('.card-body') || clone;
+    function hookChatObserver(chatFrame) {
+        if (!chatFrame) return;
 
-      cardBody.querySelectorAll(
-        '[data-chat-target="form"],[data-chat-target="input"],[data-chat-target="suggestions"],form,input,textarea'
-      ).forEach(el => el.remove());
+        if (lastChatFrame && chatFrame !== lastChatFrame) {
+            unhookChatObserver();
+        }
 
-      const fullText = (cardBody.innerText || '').trim();
-      const rawLines = [];
-      if (fullText) {
-        fullText.split('\n').forEach(l => {
-          const t = l.trim();
-          if (t) rawLines.push(t);
+        if (chatObserverHooked && chatObserver) return;
+
+        lastChatFrame = chatFrame;
+
+        chatObserver = new MutationObserver(() => {
+            if (hookChatObserver.__raf) return;
+            hookChatObserver.__raf = requestAnimationFrame(() => {
+                hookChatObserver.__raf = null;
+                if (!addonEnabled || !modalVisible) return;
+                syncMessagesFromOriginal();
+            });
         });
-      }
 
-      const blacklist = new Set(['Unpin from Layout', '[UNPIN]', 'Comm Terminal']);
-      const lines = rawLines.filter(l => !blacklist.has(l));
-      snapshotMessages = lines.length > 0 ? buildMessages(lines) : [];
+        chatObserver.observe(chatFrame, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+        chatObserverHooked = true;
+    }
+    hookChatObserver.__raf = null;
+
+    function unhookChatObserver() {
+        if (chatObserver) {
+            try {
+                chatObserver.disconnect();
+            } catch (e) {}
+        }
+        chatObserver = null;
+        chatObserverHooked = false;
+        lastChatFrame = null;
+        if (hookChatObserver.__raf) {
+            cancelAnimationFrame(hookChatObserver.__raf);
+            hookChatObserver.__raf = null;
+        }
     }
 
-    let added = 0;
-    snapshotMessages.forEach(msg => {
-    const key = makeKey(msg);
-    if (!messageKeySet.has(key)) {
-      messageKeySet.add(key);
-      messageLog.push({
-        id: msg.id || undefined,
-        username: msg.username || 'SYSTEM',
-        usernameColor: msg.usernameColor || null, // ← ADD THIS LINE
-        time: msg.time || '',
-        message: msg.message || ''
-      });
-      added++;
+    const timeRegex = /^\d{1,2}:\d{2}\s*(AM|PM)$/i;
+    const idRegex = /^\d{6,}$/;
+
+    function buildMessages(lines) {
+        const messages = [];
+        let i = 0;
+
+        while (i < lines.length) {
+            const line = lines[i];
+
+            if (
+                idRegex.test(line) &&
+                i + 2 < lines.length &&
+                timeRegex.test(lines[i + 1]) &&
+                !idRegex.test(lines[i + 2])
+            ) {
+                const time = lines[i + 1];
+                const user = lines[i + 2];
+
+                let j = i + 3;
+                const msgLines = [];
+                while (j < lines.length && !idRegex.test(lines[j])) {
+                    msgLines.push(lines[j]);
+                    j++;
+                }
+
+                const messageText = msgLines.join('\n').replace(/^>\s?/gm, '').trim();
+                if (messageText) messages.push({
+                    username: user,
+                    time,
+                    message: messageText
+                });
+
+                i = j;
+                continue;
+            }
+
+            if (line.startsWith('>')) {
+                const msgLines = [];
+                let j = i;
+                while (j < lines.length && lines[j].startsWith('>')) {
+                    msgLines.push(lines[j]);
+                    j++;
+                }
+
+                const messageText = msgLines.join('\n').replace(/^>\s?/gm, '').trim();
+                if (messageText) messages.push({
+                    username: 'SYSTEM',
+                    time: '',
+                    message: messageText
+                });
+
+                i = j;
+                continue;
+            }
+
+            messages.push({
+                username: 'SYSTEM',
+                time: '',
+                message: line
+            });
+            i++;
+        }
+
+        messages.reverse();
+        return messages;
     }
-  });
 
-    if (added > 0) saveHistory();
-    renderMessage(modalBody, nearBottom, oldScrollTop);
-  }
+    function parseChatMessages(chatFrame) {
+        const out = [];
+        if (!chatFrame) return out;
 
-  function renderMessage(modalBody, nearBottomOverride, oldScrollTopOverride) {
-    const { remote } = ensureBodyLayers(modalBody);
-    if (!remote) return;
+        const list = chatFrame.querySelector('#chat-messages') || chatFrame;
+        const nodes = list.querySelectorAll('[data-role="chat-message"]');
+        if (!nodes || !nodes.length) return out;
 
-    const oldScrollTop = oldScrollTopOverride ?? modalBody.scrollTop;
-    const maxScroll = modalBody.scrollHeight - modalBody.clientHeight;
-    const nearBottom =
-      typeof nearBottomOverride === 'boolean'
-        ? nearBottomOverride
-        : (maxScroll <= 0 ? true : (maxScroll - oldScrollTop) < 40);
+        nodes.forEach(node => {
+            try {
+                const isSystem = String(node.getAttribute('data-is-system') || '') === 'true';
 
-    // Get current operator name
-    const operName = core?.getOperName?.() || '';
-    const operNameLower = normName(operName);
+                const rawId = (node.getAttribute('id') || node.id || '').trim();
+                const id = rawId ? rawId.replace(/^"+|"+$/g, '') : '';
 
-    remote.innerHTML = '';
-    if (messageLog.length === 0) {
-      const p = document.createElement('div');
-      p.className = 'dc-comm-empty';
-      p.textContent = 'No messages yet.';
-      remote.appendChild(p);
-    } else {
-      messageLog.forEach(msg => {
-  const wrapper = document.createElement('div');
-  const isSystem = (msg.username === 'SYSTEM' || msg.username === 'LOCAL');
-  const friend = !isSystem ? getFriend(msg.username) : null;
+                const tsNode = node.querySelector('[data-controller="local-time"][data-local-time-format-value="time"]');
+                const timeText = (tsNode?.textContent || '').trim();
 
-  // Check if message mentions the current operator
-  const isMention = operNameLower && msg.message.toLowerCase().includes(`@${operNameLower}`);
+                let username = 'SYSTEM';
+                let usernameColor = null;
 
-  wrapper.className =
-    `dc-comm-line` +
-    (isSystem ? ' dc-comm-system' : '') +
-    (friend ? ' dc-comm-friend' : '') +
-    (isMention ? ' dc-comm-mention' : '');
+                if (!isSystem) {
+                    const link = node.querySelector('a.worker-name-link');
+                    if (link) {
+                        const spans = Array.from(link.querySelectorAll('span')).filter(s => !s.classList.contains('official-badge'));
+                        const candidate = spans.length ? spans[spans.length - 1] : link;
+                        username = (candidate.textContent || '').trim() || 'SYSTEM';
+                        usernameColor = getComputedStyle(candidate).color;
+                    } else {
+                        const anyUser = node.querySelector('.worker-name-link, .font-semibold, [data-worker-id]');
+                        if (anyUser) {
+                            username = (anyUser.textContent || '').trim() || 'SYSTEM';
+                            usernameColor = getComputedStyle(anyUser).color;
+                        }
+                    }
+                }
 
-  // Set color CSS variable - friend color takes priority, then captured color
-  if (friend) {
-    wrapper.style.setProperty('--dc-user-name-color', friend.nameColor);
-    wrapper.style.setProperty('--dc-friend-msg', friend.msgColor);
-  } else if (msg.usernameColor) {
-    wrapper.style.setProperty('--dc-user-name-color', msg.usernameColor);
-  }
+                const msgNode = node.querySelector('.break-words') || node.querySelector('.leading-relaxed');
+                const message = (msgNode?.textContent || '').trim();
 
-  wrapper.innerHTML = `
+                if (!message) return;
+
+                out.push({
+                    id: id || String(node.getAttribute('data-message-timestamp') || '').replace(/^"+|"+$/g, ''),
+                    username,
+                    usernameColor,
+                    time: timeText || '',
+                    message
+                });
+            } catch (e) {}
+        });
+
+        out.reverse();
+        return out;
+    }
+
+    function ensureBodyLayers(modalBody) {
+        if (!modalBody) return {
+            remote: null,
+            local: null
+        };
+        let remote = modalBody.querySelector('.dc-comm-remote');
+        let local = modalBody.querySelector('.dc-comm-local');
+
+        if (!remote) {
+            remote = document.createElement('div');
+            remote.className = 'dc-comm-remote';
+            modalBody.appendChild(remote);
+        }
+        if (!local) {
+            local = document.createElement('div');
+            local.className = 'dc-comm-local';
+            modalBody.appendChild(local);
+        }
+        return {
+            remote,
+            local
+        };
+    }
+
+    function syncMessagesFromOriginal() {
+        const modalBody = document.getElementById(MODAL_BODY_ID);
+        if (!modalBody) return;
+
+        const chatFrame = getChatFrame();
+        if (!chatFrame) {
+            renderMessage(modalBody);
+            return;
+        }
+
+        const modal = document.getElementById(MODAL_ID);
+        if (modal) {
+            const userColor = getChatUsernameColor();
+            if (userColor) {
+                modal.style.setProperty('--dc-comm-user-color', userColor);
+            }
+        }
+
+        const oldScrollTop = modalBody.scrollTop;
+        const maxScroll = modalBody.scrollHeight - modalBody.clientHeight;
+        const nearBottom = maxScroll <= 0 ? true : (maxScroll - oldScrollTop) < 40;
+
+        const domMsgs = parseChatMessages(chatFrame);
+
+        let snapshotMessages = domMsgs;
+        if (!snapshotMessages || snapshotMessages.length === 0) {
+            const clone = chatFrame.cloneNode(true);
+            const cardBody = clone.querySelector('.card-body') || clone;
+
+            cardBody.querySelectorAll(
+                '[data-chat-target="form"],[data-chat-target="input"],[data-chat-target="suggestions"],form,input,textarea'
+            ).forEach(el => el.remove());
+
+            const fullText = (cardBody.innerText || '').trim();
+            const rawLines = [];
+            if (fullText) {
+                fullText.split('\n').forEach(l => {
+                    const t = l.trim();
+                    if (t) rawLines.push(t);
+                });
+            }
+
+            const blacklist = new Set(['Unpin from Layout', '[UNPIN]', 'Comm Terminal']);
+            const lines = rawLines.filter(l => !blacklist.has(l));
+            snapshotMessages = lines.length > 0 ? buildMessages(lines) : [];
+        }
+
+        // Get operator name with fallbacks
+        let operName = core?.getOperName?.() || '';
+
+        // Fallback: try to get from page
+        if (!operName) {
+            const chatRoot = getChatRoot();
+            if (chatRoot) {
+                const userLink = chatRoot.querySelector('.worker-name-link');
+                if (userLink) {
+                    operName = (userLink.textContent || '').trim();
+                }
+            }
+        }
+
+        // Fallback: try from any page element
+        if (!operName) {
+            const anyUserEl = document.querySelector('[data-worker-id]');
+            if (anyUserEl) {
+                operName = anyUserEl.textContent?.trim() || '';
+            }
+        }
+
+        const operNameLower = normName(operName);
+
+        if (DEBUG_MENTIONS) {
+            console.log('[CustomCommModal] Operator name detected:', { operName, operNameLower });
+        }
+
+        let added = 0;
+        snapshotMessages.forEach(msg => {
+            const key = makeKey(msg);
+            const isNew = !messageKeySet.has(key);
+
+            if (isNew) {
+                messageKeySet.add(key);
+                messageLog.push({
+                    id: msg.id || undefined,
+                    username: msg.username || 'SYSTEM',
+                    usernameColor: msg.usernameColor || null,
+                    time: msg.time || '',
+                    message: msg.message || ''
+                });
+                added++;
+            }
+
+            // Check for mentions - only on NEW messages
+            if (isNew && operNameLower) {
+                const msgLower = msg.message.toLowerCase();
+                const usernameLower = (msg.username || '').toLowerCase();
+
+                // Check if:
+                // 1. Not a system message
+                // 2. Not from the operator themselves
+                // 3. Contains @username mention
+                const isMention =
+                    msg.username !== 'SYSTEM' &&
+                    msg.username !== 'LOCAL' &&
+                    usernameLower !== operNameLower &&
+                    msgLower.includes(`@${operNameLower}`);
+
+                if (DEBUG_MENTIONS && msgLower.includes('@')) {
+                    console.log('[CustomCommModal] Mention check:', {
+                        username: msg.username,
+                        operName,
+                        message: msg.message,
+                        isMention,
+                        contains: msgLower.includes(`@${operNameLower}`)
+                    });
+                }
+
+                if (isMention) {
+                    notifyMention(msg.username, msg.message);
+                }
+            }
+        });
+
+        if (added > 0) saveHistory();
+        renderMessage(modalBody, nearBottom, oldScrollTop);
+    }
+
+    function renderMessage(modalBody, nearBottomOverride, oldScrollTopOverride) {
+        const {
+            remote
+        } = ensureBodyLayers(modalBody);
+        if (!remote) return;
+
+        const oldScrollTop = oldScrollTopOverride ?? modalBody.scrollTop;
+        const maxScroll = modalBody.scrollHeight - modalBody.clientHeight;
+        const nearBottom =
+            typeof nearBottomOverride === 'boolean' ?
+            nearBottomOverride :
+            (maxScroll <= 0 ? true : (maxScroll - oldScrollTop) < 40);
+
+        // Get current operator name
+        const operName = core?.getOperName?.() || '';
+        const operNameLower = normName(operName);
+
+        remote.innerHTML = '';
+        if (messageLog.length === 0) {
+            const p = document.createElement('div');
+            p.className = 'dc-comm-empty';
+            p.textContent = 'No messages yet.';
+            remote.appendChild(p);
+        } else {
+            messageLog.forEach(msg => {
+                const wrapper = document.createElement('div');
+                const isSystem = (msg.username === 'SYSTEM' || msg.username === 'LOCAL');
+                const friend = !isSystem ? getFriend(msg.username) : null;
+
+                // Check if message mentions the current operator
+                const isMention = operNameLower && msg.message.toLowerCase().includes(`@${operNameLower}`);
+
+                wrapper.className =
+                    `dc-comm-line` +
+                    (isSystem ? ' dc-comm-system' : '') +
+                    (friend ? ' dc-comm-friend' : '') +
+                    (isMention ? ' dc-comm-mention' : '');
+
+                // Set color CSS variable - friend color takes priority, then captured color
+                if (friend) {
+                    wrapper.style.setProperty('--dc-user-name-color', friend.nameColor);
+                    wrapper.style.setProperty('--dc-friend-msg', friend.msgColor);
+                } else if (msg.usernameColor) {
+                    wrapper.style.setProperty('--dc-user-name-color', msg.usernameColor);
+                }
+
+                wrapper.innerHTML = `
     <div class="dc-comm-meta">
       <span class="dc-comm-user">${escapeHtml(msg.username)}</span>
       <span class="dc-comm-time">${escapeHtml(msg.time)}</span>
@@ -662,47 +864,47 @@
     </div>
     <div class="dc-comm-text">${escapeHtml(msg.message)}</div>
   `;
-  remote.appendChild(wrapper);
-});
+                remote.appendChild(wrapper);
+            });
+        }
+
+        modalBody.scrollTop = nearBottom ? modalBody.scrollHeight : oldScrollTop;
     }
 
-    modalBody.scrollTop = nearBottom ? modalBody.scrollHeight : oldScrollTop;
-  }
+    function ensureCommModalExist() {
+        let modal = document.getElementById(MODAL_ID);
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = MODAL_ID;
 
-  function ensureCommModalExist() {
-    let modal = document.getElementById(MODAL_ID);
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = MODAL_ID;
+            const defaultW = 440;
+            const defaultH = 320;
+            const defaultX = unsafeWindow.innerWidth - (defaultW + 40);
+            const defaultY = unsafeWindow.innerHeight - (defaultH + 40);
 
-      const defaultW = 440;
-      const defaultH = 320;
-      const defaultX = window.innerWidth - (defaultW + 40);
-      const defaultY = window.innerHeight - (defaultH + 40);
+            const savedX = getCfg(CFG_MODAL_X, defaultX);
+            const savedY = getCfg(CFG_MODAL_Y, defaultY);
+            const savedW = getCfg(CFG_MODAL_W, defaultW);
+            const savedH = getCfg(CFG_MODAL_H, defaultH);
 
-      const savedX = getCfg(CFG_MODAL_X, defaultX);
-      const savedY = getCfg(CFG_MODAL_Y, defaultY);
-      const savedW = getCfg(CFG_MODAL_W, defaultW);
-      const savedH = getCfg(CFG_MODAL_H, defaultH);
+            Object.assign(modal.style, {
+                position: 'fixed',
+                left: savedX + 'px',
+                top: savedY + 'px',
+                width: savedW + 'px',
+                height: savedH + 'px',
+                background: 'rgba(8, 8, 12, 0.98)',
+                color: '#f8f8ff',
+                border: '1px solid #444',
+                borderRadius: '8px',
+                boxShadow: '0 12px 30px rgba(0,0,0,0.5)',
+                zIndex: '999999999',
+                display: 'block',
+                boxSizing: 'border-box',
+                fontFamily: 'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
+            });
 
-      Object.assign(modal.style, {
-        position: 'fixed',
-        left: savedX + 'px',
-        top: savedY + 'px',
-        width: savedW + 'px',
-        height: savedH + 'px',
-        background: 'rgba(8, 8, 12, 0.98)',
-        color: '#f8f8ff',
-        border: '1px solid #444',
-        borderRadius: '8px',
-        boxShadow: '0 12px 30px rgba(0,0,0,0.5)',
-        zIndex: '999999999',
-        display: 'block',
-        boxSizing: 'border-box',
-        fontFamily: 'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
-      });
-
-      modal.innerHTML = `
+            modal.innerHTML = `
         <div id="${MODAL_HEADER_ID}" class="dc-comm-header">
           <span class="dc-comm-title">Comm Terminal</span>
           <button type="button" class="dc-comm-btn dc-comm-friendsbtn" title="Friends Manager">👥</button>
@@ -719,128 +921,130 @@
         <div id="${MODAL_RESIZE_ID}" class="dc-comm-resize" title="Resize"></div>
       `;
 
-      document.body.appendChild(modal);
+            document.body.appendChild(modal);
 
-      modal.dataset.deepcoModal = '1';
-      core?.ui?.registerModalElement?.(modal, { bringToFrontOnRegister: true });
+            modal.dataset.deepcoModal = '1';
+            core?.ui?.registerModalElement?.(modal, {
+                bringToFrontOnRegister: true
+            });
 
-      const header = document.getElementById(MODAL_HEADER_ID);
-      const closeBtn = modal.querySelector('.dc-comm-close');
-      const friendsBtn = modal.querySelector('.dc-comm-friendsbtn');
-      const sendBtn = document.getElementById(MODAL_SEND_ID);
-      const inputEl = document.getElementById(MODAL_INPUT_ID);
-      const modalBody = document.getElementById(MODAL_BODY_ID);
-      const resizeEl = document.getElementById(MODAL_RESIZE_ID);
+            const header = document.getElementById(MODAL_HEADER_ID);
+            const closeBtn = modal.querySelector('.dc-comm-close');
+            const friendsBtn = modal.querySelector('.dc-comm-friendsbtn');
+            const sendBtn = document.getElementById(MODAL_SEND_ID);
+            const inputEl = document.getElementById(MODAL_INPUT_ID);
+            const modalBody = document.getElementById(MODAL_BODY_ID);
+            const resizeEl = document.getElementById(MODAL_RESIZE_ID);
 
-      closeBtn.addEventListener('click', () => {
-        modalVisible = false;
-        if (core) setCfg(CFG_MODAL_VISIBLE, false);
-        modal.style.display = 'none';
-      });
+            closeBtn.addEventListener('click', () => {
+                modalVisible = false;
+                if (core) setCfg(CFG_MODAL_VISIBLE, false);
+                modal.style.display = 'none';
+            });
 
-      friendsBtn.addEventListener('click', () => {
-        toggleFriendsManager();
-      });
+            friendsBtn.addEventListener('click', () => {
+                toggleFriendsManager();
+            });
 
-      makeModalDraggable(modal, header, () => {
-        const rect = modal.getBoundingClientRect();
-        if (core) {
-          setCfg(CFG_MODAL_X, rect.left);
-          setCfg(CFG_MODAL_Y, rect.top);
+            makeModalDraggable(modal, header, () => {
+                const rect = modal.getBoundingClientRect();
+                if (core) {
+                    setCfg(CFG_MODAL_X, rect.left);
+                    setCfg(CFG_MODAL_Y, rect.top);
+                }
+            });
+
+            makeModalResizable(modal, resizeEl, () => {
+                const rect = modal.getBoundingClientRect();
+                if (core) {
+                    setCfg(CFG_MODAL_W, Math.round(rect.width));
+                    setCfg(CFG_MODAL_H, Math.round(rect.height));
+                }
+            });
+
+            sendBtn.addEventListener('click', () => sendMessageFromModal());
+            inputEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    sendMessageFromModal();
+                }
+            });
+
+            if (modalBody) {
+                modalBody.addEventListener('click', (e) => {
+                    const userSpan = e.target.closest('.dc-comm-user');
+                    if (!userSpan) return;
+
+                    const username = userSpan.textContent.trim();
+                    if (!username) return;
+
+                    const mention = `@${username} `;
+                    const commInput = document.getElementById(MODAL_INPUT_ID);
+                    if (!commInput) return;
+
+                    if (!commInput.value || !commInput.value.trim()) commInput.value = mention;
+                    else if (!commInput.value.startsWith(mention)) commInput.value = mention + commInput.value;
+
+                    commInput.focus();
+                    const len = commInput.value.length;
+                    commInput.setSelectionRange(len, len);
+                });
+            }
+
+            const userColor = getChatUsernameColor();
+            if (userColor) modal.style.setProperty('--dc-comm-user-color', userColor);
+
+            renderMessage(modalBody, true);
+        } else {
+            modal.style.display = 'block';
+            ensureBodyLayers(document.getElementById(MODAL_BODY_ID));
         }
-      });
-
-      makeModalResizable(modal, resizeEl, () => {
-        const rect = modal.getBoundingClientRect();
-        if (core) {
-          setCfg(CFG_MODAL_W, Math.round(rect.width));
-          setCfg(CFG_MODAL_H, Math.round(rect.height));
-        }
-      });
-
-      sendBtn.addEventListener('click', () => sendMessageFromModal());
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          sendMessageFromModal();
-        }
-      });
-
-      if (modalBody) {
-        modalBody.addEventListener('click', (e) => {
-          const userSpan = e.target.closest('.dc-comm-user');
-          if (!userSpan) return;
-
-          const username = userSpan.textContent.trim();
-          if (!username) return;
-
-          const mention = `@${username} `;
-          const commInput = document.getElementById(MODAL_INPUT_ID);
-          if (!commInput) return;
-
-          if (!commInput.value || !commInput.value.trim()) commInput.value = mention;
-          else if (!commInput.value.startsWith(mention)) commInput.value = mention + commInput.value;
-
-          commInput.focus();
-          const len = commInput.value.length;
-          commInput.setSelectionRange(len, len);
-        });
-      }
-
-      const userColor = getChatUsernameColor();
-      if (userColor) modal.style.setProperty('--dc-comm-user-color', userColor);
-
-      renderMessage(modalBody, true);
-    } else {
-      modal.style.display = 'block';
-      ensureBodyLayers(document.getElementById(MODAL_BODY_ID));
     }
-  }
 
-  function toggleFriendsManager() {
-    friendsMgrVisible = !friendsMgrVisible;
-    if (core) setCfg(CFG_FM_VISIBLE, friendsMgrVisible);
-    if (friendsMgrVisible) ensureFriendsManagerExists();
-    else {
-      const fm = document.getElementById(FM_ID);
-      if (fm) fm.style.display = 'none';
+    function toggleFriendsManager() {
+        friendsMgrVisible = !friendsMgrVisible;
+        if (core) setCfg(CFG_FM_VISIBLE, friendsMgrVisible);
+        if (friendsMgrVisible) ensureFriendsManagerExists();
+        else {
+            const fm = document.getElementById(FM_ID);
+            if (fm) fm.style.display = 'none';
+        }
     }
-  }
 
-  function ensureFriendsManagerExists() {
-    let fm = document.getElementById(FM_ID);
-    if (!fm) {
-      fm = document.createElement('div');
-      fm.id = FM_ID;
+    function ensureFriendsManagerExists() {
+        let fm = document.getElementById(FM_ID);
+        if (!fm) {
+            fm = document.createElement('div');
+            fm.id = FM_ID;
 
-      const defaultW = 380;
-      const defaultH = 360;
-      const defaultX = Math.max(20, window.innerWidth - (defaultW + 520));
-      const defaultY = 80;
+            const defaultW = 380;
+            const defaultH = 360;
+            const defaultX = Math.max(20, unsafeWindow.innerWidth - (defaultW + 520));
+            const defaultY = 80;
 
-      const savedX = getCfg(CFG_FM_X, defaultX);
-      const savedY = getCfg(CFG_FM_Y, defaultY);
-      const savedW = getCfg(CFG_FM_W, defaultW);
-      const savedH = getCfg(CFG_FM_H, defaultH);
+            const savedX = getCfg(CFG_FM_X, defaultX);
+            const savedY = getCfg(CFG_FM_Y, defaultY);
+            const savedW = getCfg(CFG_FM_W, defaultW);
+            const savedH = getCfg(CFG_FM_H, defaultH);
 
-      Object.assign(fm.style, {
-        position: 'fixed',
-        left: savedX + 'px',
-        top: savedY + 'px',
-        width: savedW + 'px',
-        height: savedH + 'px',
-        background: 'rgba(10, 10, 16, 0.98)',
-        color: '#f8f8ff',
-        border: '1px solid #444',
-        borderRadius: '10px',
-        boxShadow: '0 12px 30px rgba(0,0,0,0.55)',
-        zIndex: '999999999',
-        display: 'block',
-        boxSizing: 'border-box',
-        fontFamily: 'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
-      });
+            Object.assign(fm.style, {
+                position: 'fixed',
+                left: savedX + 'px',
+                top: savedY + 'px',
+                width: savedW + 'px',
+                height: savedH + 'px',
+                background: 'rgba(10, 10, 16, 0.98)',
+                color: '#f8f8ff',
+                border: '1px solid #444',
+                borderRadius: '10px',
+                boxShadow: '0 12px 30px rgba(0,0,0,0.55)',
+                zIndex: '999999999',
+                display: 'block',
+                boxSizing: 'border-box',
+                fontFamily: 'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
+            });
 
-      fm.innerHTML = `
+            fm.innerHTML = `
         <div id="${FM_HEADER_ID}" class="dc-fm-header">
           <span class="dc-fm-title">Friends Manager</span>
           <button type="button" class="dc-fm-close" title="Close">×</button>
@@ -865,89 +1069,94 @@
         <div id="${FM_RESIZE_ID}" class="dc-fm-resize" title="Resize"></div>
       `;
 
-      document.body.appendChild(fm);
+            document.body.appendChild(fm);
 
-      const header = fm.querySelector(`#${FM_HEADER_ID}`);
-      const closeBtn = fm.querySelector('.dc-fm-close');
-      const addName = fm.querySelector('.dc-fm-addname');
-      const addNameColor = fm.querySelector('.dc-fm-addnamecolor');
-      const addMsgColor = fm.querySelector('.dc-fm-addmsgcolor');
-      const addBtn = fm.querySelector('.dc-fm-addbtn');
-      const listEl = fm.querySelector('.dc-fm-list');
-      const refreshBtn = fm.querySelector('.dc-fm-refresh');
-      const resizeEl = fm.querySelector(`#${FM_RESIZE_ID}`);
+            const header = fm.querySelector(`#${FM_HEADER_ID}`);
+            const closeBtn = fm.querySelector('.dc-fm-close');
+            const addName = fm.querySelector('.dc-fm-addname');
+            const addNameColor = fm.querySelector('.dc-fm-addnamecolor');
+            const addMsgColor = fm.querySelector('.dc-fm-addmsgcolor');
+            const addBtn = fm.querySelector('.dc-fm-addbtn');
+            const listEl = fm.querySelector('.dc-fm-list');
+            const refreshBtn = fm.querySelector('.dc-fm-refresh');
+            const resizeEl = fm.querySelector(`#${FM_RESIZE_ID}`);
 
-      closeBtn.addEventListener('click', () => {
-        friendsMgrVisible = false;
-        if (core) setCfg(CFG_FM_VISIBLE, false);
-        fm.style.display = 'none';
-      });
+            closeBtn.addEventListener('click', () => {
+                friendsMgrVisible = false;
+                if (core) setCfg(CFG_FM_VISIBLE, false);
+                fm.style.display = 'none';
+            });
 
-      addBtn.addEventListener('click', () => {
-        const name = String(addName.value || '').trim();
-        if (!name) return;
-        const res = addFriend(name, { nameColor: addNameColor.value, msgColor: addMsgColor.value });
-        addName.value = '';
-        renderFriendsManagerList(listEl);
-        rerenderCommIfOpen();
-        toastLocal(res.msg);
-      });
+            addBtn.addEventListener('click', () => {
+                const name = String(addName.value || '').trim();
+                if (!name) return;
+                const res = addFriend(name, {
+                    nameColor: addNameColor.value,
+                    msgColor: addMsgColor.value
+                });
+                addName.value = '';
+                renderFriendsManagerList(listEl);
+                rerenderCommIfOpen();
+                toastLocal(res.msg);
+            });
 
-      addName.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') addBtn.click();
-      });
+            addName.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') addBtn.click();
+            });
 
-      refreshBtn.addEventListener('click', () => {
-        loadFriends();
-        renderFriendsManagerList(listEl);
-        rerenderCommIfOpen();
-      });
+            refreshBtn.addEventListener('click', () => {
+                loadFriends();
+                renderFriendsManagerList(listEl);
+                rerenderCommIfOpen();
+            });
 
-      makeModalDraggable(fm, header, () => {
-        const rect = fm.getBoundingClientRect();
-        if (core) {
-          setCfg(CFG_FM_X, rect.left);
-          setCfg(CFG_FM_Y, rect.top);
+            makeModalDraggable(fm, header, () => {
+                const rect = fm.getBoundingClientRect();
+                if (core) {
+                    setCfg(CFG_FM_X, rect.left);
+                    setCfg(CFG_FM_Y, rect.top);
+                }
+            });
+
+            makeModalResizable(fm, resizeEl, () => {
+                const rect = fm.getBoundingClientRect();
+                if (core) {
+                    setCfg(CFG_FM_W, Math.round(rect.width));
+                    setCfg(CFG_FM_H, Math.round(rect.height));
+                }
+            });
+
+            renderFriendsManagerList(listEl);
+        } else {
+            fm.style.display = 'block';
+            const listEl = fm.querySelector('.dc-fm-list');
+            if (listEl) renderFriendsManagerList(listEl);
         }
-      });
-
-      makeModalResizable(fm, resizeEl, () => {
-        const rect = fm.getBoundingClientRect();
-        if (core) {
-          setCfg(CFG_FM_W, Math.round(rect.width));
-          setCfg(CFG_FM_H, Math.round(rect.height));
-        }
-      });
-
-      renderFriendsManagerList(listEl);
-    } else {
-      fm.style.display = 'block';
-      const listEl = fm.querySelector('.dc-fm-list');
-      if (listEl) renderFriendsManagerList(listEl);
-    }
-  }
-
-  function renderFriendsManagerList(listEl) {
-    if (!listEl) return;
-
-    const keys = Object.keys(friendsMap).sort((a, b) => {
-      const A = friendsMap[a]?.name || a;
-      const B = friendsMap[b]?.name || b;
-      return A.localeCompare(B, undefined, { sensitivity: 'base' });
-    });
-
-    if (!keys.length) {
-      listEl.innerHTML = `<div class="dc-fm-empty">No friends yet.</div>`;
-      return;
     }
 
-    listEl.innerHTML = '';
-    keys.forEach(k => {
-      const f = friendsMap[k];
+    function renderFriendsManagerList(listEl) {
+        if (!listEl) return;
 
-      const row = document.createElement('div');
-      row.className = 'dc-fm-row';
-      row.innerHTML = `
+        const keys = Object.keys(friendsMap).sort((a, b) => {
+            const A = friendsMap[a]?.name || a;
+            const B = friendsMap[b]?.name || b;
+            return A.localeCompare(B, undefined, {
+                sensitivity: 'base'
+            });
+        });
+
+        if (!keys.length) {
+            listEl.innerHTML = `<div class="dc-fm-empty">No friends yet.</div>`;
+            return;
+        }
+
+        listEl.innerHTML = '';
+        keys.forEach(k => {
+            const f = friendsMap[k];
+
+            const row = document.createElement('div');
+            row.className = 'dc-fm-row';
+            row.innerHTML = `
         <div class="dc-fm-name">
           <div class="dc-fm-nameText">${escapeHtml(f.name)}</div>
           <div class="dc-fm-key">${escapeHtml(k)}</div>
@@ -964,303 +1173,326 @@
         </div>
       `;
 
-      const nameColorEl = row.querySelector('.dc-fm-nameColor');
-      const msgColorEl = row.querySelector('.dc-fm-msgColor');
-      const removeBtn = row.querySelector('.dc-fm-remove');
+            const nameColorEl = row.querySelector('.dc-fm-nameColor');
+            const msgColorEl = row.querySelector('.dc-fm-msgColor');
+            const removeBtn = row.querySelector('.dc-fm-remove');
 
-      const onChange = () => {
-        updateFriend(k, { nameColor: nameColorEl.value, msgColor: msgColorEl.value });
-        rerenderCommIfOpen();
-      };
+            const onChange = () => {
+                updateFriend(k, {
+                    nameColor: nameColorEl.value,
+                    msgColor: msgColorEl.value
+                });
+                rerenderCommIfOpen();
+            };
 
-      nameColorEl.addEventListener('input', onChange);
-      msgColorEl.addEventListener('input', onChange);
+            nameColorEl.addEventListener('input', onChange);
+            msgColorEl.addEventListener('input', onChange);
 
-      removeBtn.addEventListener('click', () => {
-        const res = removeFriend(k);
-        renderFriendsManagerList(listEl);
-        rerenderCommIfOpen();
-        toastLocal(res.msg);
-      });
+            removeBtn.addEventListener('click', () => {
+                const res = removeFriend(k);
+                renderFriendsManagerList(listEl);
+                rerenderCommIfOpen();
+                toastLocal(res.msg);
+            });
 
-      listEl.appendChild(row);
-    });
-  }
-
-  function rerenderCommIfOpen() {
-    const modalBody = document.getElementById(MODAL_BODY_ID);
-    if (modalBody && modalVisible) renderMessage(modalBody, true);
-  }
-
-  function toastLocal(text) {
-    const modalBody = document.getElementById(MODAL_BODY_ID);
-    if (!modalBody) return;
-    messageLog.push({ username: 'LOCAL', time: '', message: String(text || '') });
-    renderMessage(modalBody, true);
-  }
-
-  function makeModalDraggable(modal, handle, onStop) {
-    if (core?.ui?.makeDraggable) {
-      core.ui.makeDraggable({ element: modal, handle, onStop });
-      return;
+            listEl.appendChild(row);
+        });
     }
 
-    let dragging = false;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    handle.style.cursor = 'move';
-
-    handle.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      if (e.target.closest('button')) return;
-      dragging = true;
-      offsetX = modal.offsetLeft - e.clientX;
-      offsetY = modal.offsetTop - e.clientY;
-      e.preventDefault();
-    });
-
-    document.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      if (typeof onStop === 'function') onStop();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!dragging) return;
-      modal.style.left = e.clientX + offsetX + 'px';
-      modal.style.top = e.clientY + offsetY + 'px';
-    });
-  }
-
-  function makeModalResizable(modal, handle, onStop) {
-    if (!handle) return;
-
-    if (core?.ui?.makeResizable) {
-      core.ui.makeResizable({ element: modal, handle, minW: 320, minH: 220, onStop });
-      return;
-    }
-
-    let resizing = false;
-    let startX = 0, startY = 0;
-    let startW = 0, startH = 0;
-
-    handle.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      resizing = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startW = modal.getBoundingClientRect().width;
-      startH = modal.getBoundingClientRect().height;
-      e.preventDefault();
-      e.stopPropagation();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!resizing) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      const minW = 320;
-      const minH = 220;
-
-      const newW = Math.max(minW, startW + dx);
-      const newH = Math.max(minH, startH + dy);
-
-      modal.style.width = newW + 'px';
-      modal.style.height = newH + 'px';
-    });
-
-    document.addEventListener('mouseup', () => {
-      if (!resizing) return;
-      resizing = false;
-      if (typeof onStop === 'function') onStop();
-    });
-  }
-
-  function exportHistoryToCsv() {
-    const rows = [];
-    rows.push(['Username', 'Time', 'Message']);
-    messageLog.forEach(msg => rows.push([msg.username ?? '', msg.time ?? '', msg.message ?? '']));
-
-    const csvLines = rows.map(cols =>
-      cols.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
-    );
-
-    const csvContent = csvLines.join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const y = now.getFullYear();
-    const m = pad(now.getMonth() + 1);
-    const d = pad(now.getDate());
-    const hh = pad(now.getHours());
-    const mm = pad(now.getMinutes());
-    const ss = pad(now.getSeconds());
-    const filename = `deepco_comm_history_${y}-${m}-${d}_${hh}${mm}${ss}.csv`;
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    return filename;
-  }
-
-  function handleLocalCommand(text) {
-    const trimmed = String(text || '').trim();
-    const lower = trimmed.toLowerCase();
-    const modal = document.getElementById(MODAL_ID);
-
-    switch (true) {
-
-      case lower === '/friendsui':
-        toggleFriendsManager();
-        return true;
-
-      case lower === '/friends':
-        toastLocal(listFriendsText());
-        return true;
-
-      case lower.startsWith('/friend '): {
-        const name = trimmed.slice('/friend '.length).trim();
-        const r = addFriend(name);
-        toastLocal(r.msg);
-        rerenderCommIfOpen();
-
-        const listEl = document.querySelector(`#${FM_ID} .dc-fm-list`);
-        if (listEl) renderFriendsManagerList(listEl);
-        return true;
-      }
-
-      case lower.startsWith('/unfriend '): {
-        const name = trimmed.slice('/unfriend '.length).trim();
-        const r = removeFriend(name);
-        toastLocal(r.msg);
-        rerenderCommIfOpen();
-
-        const listEl = document.querySelector(`#${FM_ID} .dc-fm-list`);
-        if (listEl) renderFriendsManagerList(listEl);
-        return true;
-      }
-
-      case lower === '/close':
-        modalVisible = false;
-        if (core) setCfg(CFG_MODAL_VISIBLE, false);
-        if (modal) modal.style.display = 'none';
-        return true;
-
-      case lower === '/open':
-        modalVisible = true;
-        if (core) setCfg(CFG_MODAL_VISIBLE, true);
-        if (modal) modal.style.display = 'block';
-        ensureCommModal();
-        return true;
-
-      case lower === '/toggle':
-        modalVisible = !modalVisible;
-        if (core) setCfg(CFG_MODAL_VISIBLE, modalVisible);
-        if (modal) modal.style.display = modalVisible ? 'block' : 'none';
-        if (modalVisible) ensureCommModal();
-        return true;
-
-      case lower === '/clear': {
-        messageLog.length = 0;
-        messageKeySet.clear();
-        clearHistory();
-
+    function rerenderCommIfOpen() {
         const modalBody = document.getElementById(MODAL_BODY_ID);
-        if (modalBody) {
-          const layers = ensureBodyLayers(modalBody);
-          if (layers.remote) layers.remote.innerHTML = '';
-          if (layers.local) layers.local.innerHTML = '';
-          modalBody.scrollTop = 0;
+        if (modalBody && modalVisible) renderMessage(modalBody, true);
+    }
+
+    function toastLocal(text) {
+        const modalBody = document.getElementById(MODAL_BODY_ID);
+        if (!modalBody) return;
+        messageLog.push({
+            username: 'LOCAL',
+            time: '',
+            message: String(text || '')
+        });
+        renderMessage(modalBody, true);
+    }
+
+    function makeModalDraggable(modal, handle, onStop) {
+        if (core?.ui?.makeDraggable) {
+            core.ui.makeDraggable({
+                element: modal,
+                handle,
+                onStop
+            });
+            return;
         }
-        return true;
-      }
 
-      case lower === '/help': {
-        const helpText = [
-          'Local commands:',
-          '/help            – show this help',
-          '/close           – hide Comm Terminal',
-          '/open            – show Comm Terminal',
-          '/toggle          – toggle Comm Terminal visibility',
-          '/clear           – clear visible history in this window (and stored history)',
-          '/export          – export current history to CSV (Username, Time, Message)',
-          '/friend <name>   – add a friend (defaults)',
-          '/unfriend <name> – remove a friend',
-          '/friends         – list friends',
-          '/friendsui       – toggle Friends Manager window'
-        ].join('\n');
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
 
-        toastLocal(helpText);
-        return true;
-      }
+        handle.style.cursor = 'move';
 
-      case lower === '/export': {
-        const filename = exportHistoryToCsv();
-        toastLocal(`Exported ${messageLog.length} messages to CSV: ${filename}`);
-        return true;
-      }
+        handle.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target.closest('button')) return;
+            dragging = true;
+            offsetX = modal.offsetLeft - e.clientX;
+            offsetY = modal.offsetTop - e.clientY;
+            e.preventDefault();
+        });
 
-      default:
-        return false;
-    }
-  }
+        document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            if (typeof onStop === 'function') onStop();
+        });
 
-  function sendMessageFromModal() {
-    const inputEl = document.getElementById(MODAL_INPUT_ID);
-    if (!inputEl) return;
-
-    const raw = inputEl.value;
-    const text = raw.trim();
-    if (!text) return;
-
-    if (text.startsWith('/')) {
-      if (handleLocalCommand(text)) {
-        inputEl.value = '';
-        return;
-      }
-
-      const cmd = SLASH_COMMANDS.find(c => c.command.toLowerCase() === text.toLowerCase());
-      if (cmd?.path) {
-        window.location.href = cmd.path;
-        inputEl.value = '';
-        return;
-      }
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            modal.style.left = e.clientX + offsetX + 'px';
+            modal.style.top = e.clientY + offsetY + 'px';
+        });
     }
 
-    const chatRoot = getChatRoot();
-    if (!chatRoot) return;
+    function makeModalResizable(modal, handle, onStop) {
+        if (!handle) return;
 
-    const form =
-      chatRoot.querySelector('[data-chat-target="form"]') ||
-      chatRoot.querySelector('form');
-    if (!form) return;
+        if (core?.ui?.makeResizable) {
+            core.ui.makeResizable({
+                element: modal,
+                handle,
+                minW: 320,
+                minH: 220,
+                onStop
+            });
+            return;
+        }
 
-    const realInput =
-      chatRoot.querySelector('[data-chat-target="input"]') ||
-      form.querySelector('input[type="text"], textarea');
-    if (!realInput) return;
+        let resizing = false;
+        let startX = 0,
+            startY = 0;
+        let startW = 0,
+            startH = 0;
 
-    realInput.value = raw;
-    realInput.dispatchEvent(new Event('input', { bubbles: true }));
+        handle.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            resizing = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startW = modal.getBoundingClientRect().width;
+            startH = modal.getBoundingClientRect().height;
+            e.preventDefault();
+            e.stopPropagation();
+        });
 
-    if (form.requestSubmit) form.requestSubmit();
-    else form.submit();
+        document.addEventListener('mousemove', (e) => {
+            if (!resizing) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
 
-    inputEl.value = '';
-  }
+            const minW = 320;
+            const minH = 220;
 
-  (function injectCss() {
-    const style = document.createElement('style');
-    style.textContent = `
+            const newW = Math.max(minW, startW + dx);
+            const newH = Math.max(minH, startH + dy);
+
+            modal.style.width = newW + 'px';
+            modal.style.height = newH + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!resizing) return;
+            resizing = false;
+            if (typeof onStop === 'function') onStop();
+        });
+    }
+
+    function exportHistoryToCsv() {
+        const rows = [];
+        rows.push(['Username', 'Time', 'Message']);
+        messageLog.forEach(msg => rows.push([msg.username ?? '', msg.time ?? '', msg.message ?? '']));
+
+        const csvLines = rows.map(cols =>
+            cols.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+        );
+
+        const csvContent = csvLines.join('\r\n');
+        const blob = new Blob([csvContent], {
+            type: 'text/csv;charset=utf-8;'
+        });
+
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const y = now.getFullYear();
+        const m = pad(now.getMonth() + 1);
+        const d = pad(now.getDate());
+        const hh = pad(now.getHours());
+        const mm = pad(now.getMinutes());
+        const ss = pad(now.getSeconds());
+        const filename = `deepco_comm_history_${y}-${m}-${d}_${hh}${mm}${ss}.csv`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        return filename;
+    }
+
+    function handleLocalCommand(text) {
+        const trimmed = String(text || '').trim();
+        const lower = trimmed.toLowerCase();
+        const modal = document.getElementById(MODAL_ID);
+
+        switch (true) {
+
+            case lower === '/friendsui':
+                toggleFriendsManager();
+                return true;
+
+            case lower === '/friends':
+                toastLocal(listFriendsText());
+                return true;
+
+            case lower.startsWith('/friend '): {
+                const name = trimmed.slice('/friend '.length).trim();
+                const r = addFriend(name);
+                toastLocal(r.msg);
+                rerenderCommIfOpen();
+
+                const listEl = document.querySelector(`#${FM_ID} .dc-fm-list`);
+                if (listEl) renderFriendsManagerList(listEl);
+                return true;
+            }
+
+            case lower.startsWith('/unfriend '): {
+                const name = trimmed.slice('/unfriend '.length).trim();
+                const r = removeFriend(name);
+                toastLocal(r.msg);
+                rerenderCommIfOpen();
+
+                const listEl = document.querySelector(`#${FM_ID} .dc-fm-list`);
+                if (listEl) renderFriendsManagerList(listEl);
+                return true;
+            }
+
+            case lower === '/close':
+                modalVisible = false;
+                if (core) setCfg(CFG_MODAL_VISIBLE, false);
+                if (modal) modal.style.display = 'none';
+                return true;
+
+            case lower === '/open':
+                modalVisible = true;
+                if (core) setCfg(CFG_MODAL_VISIBLE, true);
+                if (modal) modal.style.display = 'block';
+                ensureCommModal();
+                return true;
+
+            case lower === '/toggle':
+                modalVisible = !modalVisible;
+                if (core) setCfg(CFG_MODAL_VISIBLE, modalVisible);
+                if (modal) modal.style.display = modalVisible ? 'block' : 'none';
+                if (modalVisible) ensureCommModal();
+                return true;
+
+            case lower === '/clear': {
+                messageLog.length = 0;
+                messageKeySet.clear();
+                clearHistory();
+
+                const modalBody = document.getElementById(MODAL_BODY_ID);
+                if (modalBody) {
+                    const layers = ensureBodyLayers(modalBody);
+                    if (layers.remote) layers.remote.innerHTML = '';
+                    if (layers.local) layers.local.innerHTML = '';
+                    modalBody.scrollTop = 0;
+                }
+                return true;
+            }
+
+            case lower === '/help': {
+                const helpText = [
+                    'Local commands:',
+                    '/help            – show this help',
+                    '/close           – hide Comm Terminal',
+                    '/open            – show Comm Terminal',
+                    '/toggle          – toggle Comm Terminal visibility',
+                    '/clear           – clear visible history in this window (and stored history)',
+                    '/export          – export current history to CSV (Username, Time, Message)',
+                    '/friend <name>   – add a friend (defaults)',
+                    '/unfriend <name> – remove a friend',
+                    '/friends         – list friends',
+                    '/friendsui       – toggle Friends Manager window'
+                ].join('\n');
+
+                toastLocal(helpText);
+                return true;
+            }
+
+            case lower === '/export': {
+                const filename = exportHistoryToCsv();
+                toastLocal(`Exported ${messageLog.length} messages to CSV: ${filename}`);
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    function sendMessageFromModal() {
+        const inputEl = document.getElementById(MODAL_INPUT_ID);
+        if (!inputEl) return;
+
+        const raw = inputEl.value;
+        const text = raw.trim();
+        if (!text) return;
+
+        if (text.startsWith('/')) {
+            if (handleLocalCommand(text)) {
+                inputEl.value = '';
+                return;
+            }
+
+            const cmd = SLASH_COMMANDS.find(c => c.command.toLowerCase() === text.toLowerCase());
+            if (cmd?.path) {
+                unsafeWindow.location.href = cmd.path;
+                inputEl.value = '';
+                return;
+            }
+        }
+
+        const chatRoot = getChatRoot();
+        if (!chatRoot) return;
+
+        const form =
+            chatRoot.querySelector('[data-chat-target="form"]') ||
+            chatRoot.querySelector('form');
+        if (!form) return;
+
+        const realInput =
+            chatRoot.querySelector('[data-chat-target="input"]') ||
+            form.querySelector('input[type="text"], textarea');
+        if (!realInput) return;
+
+        realInput.value = raw;
+        realInput.dispatchEvent(new Event('input', {
+            bubbles: true
+        }));
+
+        if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+
+        inputEl.value = '';
+    }
+
+    (function injectCss() {
+        const style = document.createElement('style');
+        style.textContent = `
     /* Comm modal */
     #${MODAL_ID} .dc-comm-header{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 6px;background:#15151f;border-radius:8px 8px 0 0;border-bottom:1px solid #333;user-select:none;}
     #${MODAL_ID} .dc-comm-title{font-size:12px;font-weight:700;line-height:1.1;flex:1;}
@@ -1334,94 +1566,107 @@
     #${FM_RESIZE_ID}.dc-fm-resize{position:absolute;right:6px;bottom:6px;width:12px;height:12px;cursor:nwse-resize;opacity:0.65;border-right:2px solid rgba(255,255,255,0.35);border-bottom:2px solid rgba(255,255,255,0.35);border-radius:2px;}
     #${FM_RESIZE_ID}.dc-fm-resize:hover{opacity:1;}
     `;
-    document.head.appendChild(style);
-  })();
+        document.head.appendChild(style);
+    })();
 
-  function attachTurboHooks() {
-    window.addEventListener('turbo:load', ensureCommModal);
-    window.addEventListener('turbo:render', ensureCommModal);
-    window.addEventListener('turbo:frame-load', ensureCommModal);
-  }
-  function detachTurboHooks() {
-    window.removeEventListener('turbo:load', ensureCommModal);
-    window.removeEventListener('turbo:render', ensureCommModal);
-    window.removeEventListener('turbo:frame-load', ensureCommModal);
-  }
+    function attachTurboHooks() {
+        unsafeWindow.addEventListener('turbo:load', ensureCommModal);
+        unsafeWindow.addEventListener('turbo:render', ensureCommModal);
+        unsafeWindow.addEventListener('turbo:frame-load', ensureCommModal);
+    }
 
-  function destroyAll() {
-    document.getElementById(MODAL_ID)?.remove();
-    document.getElementById(FM_ID)?.remove();
-  }
+    function detachTurboHooks() {
+        unsafeWindow.removeEventListener('turbo:load', ensureCommModal);
+        unsafeWindow.removeEventListener('turbo:render', ensureCommModal);
+        unsafeWindow.removeEventListener('turbo:frame-load', ensureCommModal);
+    }
 
-  function registerWithCore(coreObj) {
-    if (core) return;
-    core = coreObj;
+    function destroyAll() {
+        document.getElementById(MODAL_ID)?.remove();
+        document.getElementById(FM_ID)?.remove();
+    }
 
-    loadFriends();
+    function registerWithCore(coreObj) {
+        if (core) return;
+        core = coreObj;
 
-    modalVisible = !!getCfg(CFG_MODAL_VISIBLE, true);
-    friendsMgrVisible = !!getCfg(CFG_FM_VISIBLE, false);
+        loadFriends();
 
-    core.registerAddon(ADDON_ID, {
-      name: 'Custom Comm Terminal',
-      description: 'Comm Terminal + Friends Manager (per-friend colors).',
-      defaultEnabled: true,
-      ui: {
-        hideDefaultEnable: false,
-        controls: [
-          { type: 'button', label: 'Toggle Comm Terminal', action: 'event', eventName: 'DeepCo:customCommModal:toggle' },
-          { type: 'button', label: 'Friends Manager', action: 'event', eventName: 'DeepCo:customCommModal:friends' }
-        ]
-      },
-      onConfigChange: () => {
-        try {
-          modalVisible = !!getCfg(CFG_MODAL_VISIBLE, true);
-          friendsMgrVisible = !!getCfg(CFG_FM_VISIBLE, false);
-          loadFriends();
+        modalVisible = !!getCfg(CFG_MODAL_VISIBLE, true);
+        friendsMgrVisible = !!getCfg(CFG_FM_VISIBLE, false);
 
-          rerenderCommIfOpen();
-          const listEl = document.querySelector(`#${FM_ID} .dc-fm-list`);
-          if (listEl) renderFriendsManagerList(listEl);
+        core.registerAddon(ADDON_ID, {
+            name: 'Custom Comm Terminal',
+            description: 'Comm Terminal + Friends Manager (per-friend colors).',
+            defaultEnabled: true,
+            ui: {
+                hideDefaultEnable: false,
+                controls: [{
+                        type: 'button',
+                        label: 'Toggle Comm Terminal',
+                        action: 'event',
+                        eventName: 'DeepCo:customCommModal:toggle'
+                    },
+                    {
+                        type: 'button',
+                        label: 'Friends Manager',
+                        action: 'event',
+                        eventName: 'DeepCo:customCommModal:friends'
+                    }
+                ]
+            },
+            onConfigChange: () => {
+                try {
+                    modalVisible = !!getCfg(CFG_MODAL_VISIBLE, true);
+                    friendsMgrVisible = !!getCfg(CFG_FM_VISIBLE, false);
+                    loadFriends();
 
-          ensureCommModal();
-        } catch (e) {
-          log(`onConfigChange internal error: ${e?.message || e}`, 'error');
-        }
-      },
-      enable: () => {
-        addonEnabled = true;
+                    rerenderCommIfOpen();
+                    const listEl = document.querySelector(`#${FM_ID} .dc-fm-list`);
+                    if (listEl) renderFriendsManagerList(listEl);
 
-        unsubTurbo = core?.lifecycle?.onTurbo?.(() => ensureCommModal()) || null;
-        ensureCommModal();
+                    ensureCommModal();
+                } catch (e) {
+                    log(`onConfigChange internal error: ${e?.message || e}`, 'error');
+                }
+            },
+            enable: () => {
+                addonEnabled = true;
 
-        log('Addon enabled');
-      },
-      disable: () => {
-        addonEnabled = false;
+                unsubTurbo = core?.lifecycle?.onTurbo?.(() => ensureCommModal()) || null;
+                ensureCommModal();
 
-        try { unsubTurbo?.(); } catch (e) {} unsubTurbo = null;
-        unhookChatObserver();
-        destroyAll();
-        restoreChatcard();
+                log('Addon enabled');
+            },
+            disable: () => {
+                addonEnabled = false;
 
-        log('Addon disabled');
-      }
-    });
+                try {
+                    unsubTurbo?.();
+                } catch (e) {}
+                unsubTurbo = null;
+                unhookChatObserver();
+                destroyAll();
+                restoreChatcard();
 
-    window.addEventListener('DeepCo:customCommModal:toggle', () => {
-      if (!addonEnabled) return;
-      modalVisible = !modalVisible;
-      setCfg(CFG_MODAL_VISIBLE, modalVisible);
-      if (!modalVisible) document.getElementById(MODAL_ID)?.style && (document.getElementById(MODAL_ID).style.display = 'none');
-      else ensureCommModal();
-    });
+                log('Addon disabled');
+            }
+        });
 
-    window.addEventListener('DeepCo:customCommModal:friends', () => {
-      if (!addonEnabled) return;
-      toggleFriendsManager();
-    });
-  }
+        unsafeWindow.addEventListener('DeepCo:customCommModal:toggle', () => {
+            if (!addonEnabled) return;
+            modalVisible = !modalVisible;
+            setCfg(CFG_MODAL_VISIBLE, modalVisible);
+            if (!modalVisible) document.getElementById(MODAL_ID)?.style && (document.getElementById(MODAL_ID).style.display = 'none');
+            else ensureCommModal();
+        });
 
-  if (window.DeepCoCore) registerWithCore(window.DeepCoCore);
-  window.addEventListener('DeepCo:coreReady', (e) => registerWithCore(e.detail));
+        unsafeWindow.addEventListener('DeepCo:customCommModal:friends', () => {
+            if (!addonEnabled) return;
+            toggleFriendsManager();
+        });
+    }
+
+    if (unsafeWindow.DeepCoCore) registerWithCore(unsafeWindow.DeepCoCore);
+    unsafeWindow.addEventListener('DeepCo:coreReady', (e) => registerWithCore(e.detail));
 })();
