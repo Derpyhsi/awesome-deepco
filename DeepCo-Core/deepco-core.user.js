@@ -330,7 +330,7 @@
 
     getOperName() {
         try {
-          return document.getElementsByClassName("text-lg font-semibold leading-tight flex-1 truncate")[0].innerText
+          return document.getElementsByClassName("text-lg font-semibold leading-tight flex-1 truncate")[0].innerText.split("]").pop()
         } catch {
           return ''
       }
